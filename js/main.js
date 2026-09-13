@@ -1,5 +1,5 @@
 /**
- * js/main.js - 接入 Currents API 实时数据与状态管理
+ * js/main.js - 完整功能版（保留所有原版交互 + 亮暗主题 + Currents API 接入）
  */
 class SituationApp {
   constructor() {
@@ -12,40 +12,71 @@ class SituationApp {
   }
 
   async init() {
-    // 1. 初始化时钟、Canvas 粒子、KPI动画
+    this.initThemeToggle();
     this.initClock();
     this.initKPIAnimation();
     this.initCanvasParticles();
     this.initEventListeners();
 
-    // 2. 初始化 Leaflet & ECharts
     window.situationMap.init('leaflet-map');
     window.situationCharts.init();
     window.openDetailModal = (item) => this.showModal(item);
 
-    // 3. 尝试从 Currents API 获取实时数据，失败则回退到静态数据
     await this.fetchRealTimeData();
 
-    // 4. 定时热度微调与排名重排
     setInterval(() => {
       this.fluctuateHeatAndSort();
     }, 5000);
 
-    // 5. 定时追加实时事件流
     setInterval(() => {
       this.appendEventStreamItem();
     }, 3000);
 
-    // 窗口缩放适配
     window.addEventListener('resize', () => {
-      window.situationMap.resize();
-      window.situationCharts.resize();
+      clearTimeout(this.resizeTimer);
+      this.resizeTimer = setTimeout(() => {
+        window.situationMap.resize?.();
+        window.situationCharts.resize?.();
+      }, 150);
     });
+  }
+
+  initThemeToggle() {
+    const savedTheme = localStorage.getItem('dashboard_theme') || 'dark';
+    const iconEl = document.getElementById('theme-icon');
+    const textEl = document.getElementById('theme-text');
+
+    if (savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      if (iconEl) iconEl.textContent = '☀️';
+      if (textEl) textEl.textContent = '亮色模式';
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      if (iconEl) iconEl.textContent = '🌙';
+      if (textEl) textEl.textContent = '暗色模式';
+    }
+
+    const btn = document.getElementById('theme-toggle');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        if (isLight) {
+          document.documentElement.removeAttribute('data-theme');
+          if (iconEl) iconEl.textContent = '🌙';
+          if (textEl) textEl.textContent = '暗色模式';
+          localStorage.setItem('dashboard_theme', 'dark');
+        } else {
+          document.documentElement.setAttribute('data-theme', 'light');
+          if (iconEl) iconEl.textContent = '☀️';
+          if (textEl) textEl.textContent = '亮色模式';
+          localStorage.setItem('dashboard_theme', 'light');
+        }
+      });
+    }
   }
 
   async fetchRealTimeData() {
     try {
-      // 请求世界新闻 (language=en)
       const worldUrl = `https://api.currentsapi.services/v1/latest-news?language=en&apiKey=${this.currentsApiKey}`;
       const chinaUrl = `https://api.currentsapi.services/v1/latest-news?country=CN&apiKey=${this.currentsApiKey}`;
 
@@ -78,7 +109,6 @@ class SituationApp {
   }
 
   parseCurrentsNews(newsArray, scope) {
-    // 常用城市经纬度映射表，让 API 返回的新闻能准确落在地图坐标上
     const cityCoordsMap = [
       { name: 'Beijing', city: '北京, 中国', lat: 39.9042, lng: 116.4074 },
       { name: 'Shanghai', city: '上海, 中国', lat: 31.2304, lng: 121.4737 },
@@ -113,6 +143,7 @@ class SituationApp {
 
   initClock() {
     const clockEl = document.getElementById('clock-display');
+    if (!clockEl) return;
     const update = () => {
       const now = new Date();
       const pad = (n) => String(n).padStart(2, '0');
@@ -126,6 +157,7 @@ class SituationApp {
   }
 
   animateNumber(el, targetValue, duration = 1200) {
+    if (!el) return;
     const startValue = parseInt(el.textContent.replace(/,/g, ''), 10) || 0;
     const startTime = performance.now();
 
@@ -150,6 +182,7 @@ class SituationApp {
 
   initRankingList() {
     const container = document.getElementById('ranking-list');
+    if (!container) return;
     container.innerHTML = '';
 
     this.currentList.forEach((item, idx) => {
@@ -173,7 +206,7 @@ class SituationApp {
       `;
 
       itemEl.addEventListener('click', () => {
-        window.situationMap.flyToLocation(item.lat, item.lng, 6, item);
+        window.situationMap?.flyToLocation?.(item.lat, item.lng, 6, item);
         this.showModal(item);
       });
 
@@ -201,6 +234,7 @@ class SituationApp {
     this.currentList.sort((a, b) => b.heat - a.heat);
 
     const container = document.getElementById('ranking-list');
+    if (!container) return;
     const childNodes = Array.from(container.children);
 
     this.currentList.forEach((item, idx) => {
@@ -215,7 +249,8 @@ class SituationApp {
 
   appendEventStreamItem() {
     const track = document.getElementById('event-stream-track');
-    const templates = window.HOTSPOT_DATA.eventTemplates;
+    const templates = window.HOTSPOT_DATA?.eventTemplates || [];
+    if (!track || templates.length === 0) return;
     const itemData = templates[Math.floor(Math.random() * templates.length)];
 
     const now = new Date();
@@ -248,6 +283,7 @@ class SituationApp {
 
   initCanvasParticles() {
     this.canvas = document.getElementById('bg-canvas');
+    if (!this.canvas) return;
     this.ctx = this.canvas.getContext('2d');
     this.resizeCanvas();
 
@@ -275,7 +311,7 @@ class SituationApp {
 
         this.ctx.beginPath();
         this.ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        this.ctx.fillStyle = 'rgba(0, 245, 212, 0.45)';
+        this.ctx.fillStyle = 'rgba(139, 92, 246, 0.45)';
         this.ctx.fill();
       });
 
@@ -288,7 +324,7 @@ class SituationApp {
             this.ctx.beginPath();
             this.ctx.moveTo(this.particles[i].x, this.particles[i].y);
             this.ctx.lineTo(this.particles[j].x, this.particles[j].y);
-            this.ctx.strokeStyle = `rgba(0, 245, 212, ${
+            this.ctx.strokeStyle = `rgba(139, 92, 246, ${
               (120 - dist) / 120 * 0.15
             })`;
             this.ctx.lineWidth = 0.6;
@@ -304,31 +340,39 @@ class SituationApp {
   }
 
   resizeCanvas() {
+    if (!this.canvas) return;
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
   }
 
   showModal(item) {
     const modal = document.getElementById('detail-modal');
-    document.getElementById('modal-cat').textContent = this.formatCategory(
-      item.category
+    if (!modal) return;
+
+    const setElText = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    };
+
+    setElText('modal-cat', this.formatCategory(item.category));
+    setElText('modal-title', item.title);
+    setElText('modal-city', item.city);
+    setElText('modal-heat', item.heat);
+    setElText(
+      'modal-level',
+      item.level === 'critical' ? '严重告警' : item.level === 'major' ? '重大关注' : '常规热点'
     );
-    document.getElementById('modal-title').textContent = item.title;
-    document.getElementById('modal-city').textContent = item.city;
-    document.getElementById('modal-heat').textContent = item.heat;
-    document.getElementById('modal-level').textContent =
-      item.level === 'critical' ? '严重告警' : item.level === 'major' ? '重大关注' : '常规热点';
-    document.getElementById('modal-spread').textContent = (
-      item.spread / 10000
-    ).toFixed(1) + '万次';
-    document.getElementById('modal-sentiment').textContent =
+    setElText('modal-spread', (item.spread / 10000).toFixed(1) + '万次');
+    setElText(
+      'modal-sentiment',
       item.sentiment === 'positive'
         ? '正面为主'
         : item.sentiment === 'negative'
         ? '负面情绪偏高'
-        : '中性平稳';
-    document.getElementById('modal-time').textContent = new Date().toLocaleString();
-    document.getElementById('modal-summary').textContent = item.summary;
+        : '中性平稳'
+    );
+    setElText('modal-time', new Date().toLocaleString());
+    setElText('modal-summary', item.summary);
 
     modal.classList.add('active');
   }
@@ -345,9 +389,9 @@ class SituationApp {
         this.currentList = [...window.HOTSPOT_DATA[scope]];
 
         this.initRankingList();
-        window.situationMap.switchScope(scope);
-        window.situationMap.renderHotspots(this.currentList, scope);
-        window.situationCharts.updateByScope(scope);
+        window.situationMap?.switchScope?.(scope);
+        window.situationMap?.renderHotspots(this.currentList, scope);
+        window.situationCharts?.updateByScope(scope);
       });
     });
 
@@ -357,23 +401,25 @@ class SituationApp {
         layerBtns.forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
         const layerType = btn.dataset.layer;
-        window.situationMap.setTileLayer(layerType);
+        window.situationMap?.setTileLayer?.(layerType);
       });
     });
 
-    document
-      .getElementById('modal-close')
-      .addEventListener('click', () => {
-        document.getElementById('detail-modal').classList.remove('active');
+    const closeBtn = document.getElementById('modal-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        document.getElementById('detail-modal')?.classList.remove('active');
       });
+    }
 
-    document
-      .getElementById('detail-modal')
-      .addEventListener('click', (e) => {
+    const modalEl = document.getElementById('detail-modal');
+    if (modalEl) {
+      modalEl.addEventListener('click', (e) => {
         if (e.target.id === 'detail-modal') {
           e.target.classList.remove('active');
         }
       });
+    }
 
     const mobileTabs = document.querySelectorAll('.mobile-tab-btn');
     const viewPanels = {
@@ -389,14 +435,14 @@ class SituationApp {
 
         const targetId = tab.dataset.target;
         Object.keys(viewPanels).forEach((key) => {
-          viewPanels[key].classList.remove('active-view');
+          viewPanels[key]?.classList.remove('active-view');
         });
-        viewPanels[targetId].classList.add('active-view');
+        viewPanels[targetId]?.classList.add('active-view');
 
         if (targetId === 'view-map') {
-          setTimeout(() => window.situationMap.resize(), 100);
+          setTimeout(() => window.situationMap?.resize?.(), 100);
         } else if (targetId === 'view-charts') {
-          setTimeout(() => window.situationCharts.resize(), 100);
+          setTimeout(() => window.situationCharts?.resize?.(), 100);
         }
       });
     });
