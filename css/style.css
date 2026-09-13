@@ -62,7 +62,7 @@ html, body {
 }
 
 .system-title {
-  font-size: 0.95rem;
+  font-size: 0.82rem; /* 从 0.95rem 调小 */
   font-weight: 700;
   background: linear-gradient(90deg, #f8fafc, #8b5cf6);
   -webkit-background-clip: text;
@@ -70,16 +70,11 @@ html, body {
 }
 
 .sub-title {
-  font-size: 0.68rem;
+  font-size: 0.6rem; /* 从 0.68rem 调小 */
   color: #94a3b8;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
 }
 
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
 
 .live-status {
   display: flex;
