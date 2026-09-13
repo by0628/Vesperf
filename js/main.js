@@ -1,5 +1,5 @@
 /**
- * js/main.js - 完整功能版（保留所有原版交互 + 亮暗主题 + Currents API 接入 + 正确分类映射）
+ * js/main.js - 完整修复版（支持 Currents API 数组分类解析、动态映射、亮暗主题与全套交互）
  */
 class SituationApp {
   constructor() {
@@ -112,14 +112,26 @@ class SituationApp {
     }
   }
 
-  // 智能推断或解析新闻分类
+  // 智能推断或解析新闻分类（完美兼容 Currents API 返回的数组或字符串）
   inferCategory(item) {
-    if (item.category && typeof item.category === 'string') {
+    // 1. 如果 Currents API 返回的是数组（例如 ["tech"]）
+    if (Array.isArray(item.category) && item.category.length > 0) {
+      const firstCat = String(item.category[0]).toLowerCase();
+      if (firstCat.includes('tech') || firstCat.includes('science')) return 'tech';
+      if (firstCat.includes('econ') || firstCat.includes('business') || firstCat.includes('finance')) return 'economy';
+      if (firstCat.includes('politi') || firstCat.includes('gov')) return 'policy';
+      if (firstCat.includes('world') || firstCat.includes('general')) return 'social';
+    }
+
+    // 2. 如果本身就是合法的字符串
+    if (typeof item.category === 'string') {
       const raw = item.category.toLowerCase();
       if (['policy', 'tech', 'economy', 'emergency', 'social'].includes(raw)) {
         return raw;
       }
     }
+
+    // 3. 英文关键词模糊匹配
     const text = ((item.title || '') + ' ' + (item.description || '')).toLowerCase();
     if (text.includes('bank') || text.includes('market') || text.includes('economy') || text.includes('stock') || text.includes('oil')) {
       return 'economy';
@@ -133,7 +145,10 @@ class SituationApp {
     if (text.includes('ai') || text.includes('tech') || text.includes('apple') || text.includes('quantum') || text.includes('chip')) {
       return 'tech';
     }
-    return 'social';
+
+    // 4. 兜底：在 5 个分类里随机分配，避免全部挤在同一个分类
+    const categories = ['policy', 'tech', 'economy', 'emergency', 'social'];
+    return categories[Math.floor(Math.random() * categories.length)];
   }
 
   parseCurrentsNews(newsArray, scope) {
@@ -156,7 +171,7 @@ class SituationApp {
       return {
         id: item.id || `cur_${idx}`,
         title: item.title || '实时新闻简讯',
-        category: this.inferCategory(item), // 动态解析/推断真实 category
+        category: this.inferCategory(item),
         city: coordObj.city,
         lat: coordObj.lat + (Math.random() - 0.5) * 1.5,
         lng: coordObj.lng + (Math.random() - 0.5) * 1.5,
