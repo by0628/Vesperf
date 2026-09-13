@@ -1,186 +1,129 @@
 /**
- * js/map.js - Leaflet.js 地图渲染、贝塞尔弧线、脉冲标记与交互控制
+ * js/map.js - 修复地图漂移、补全飞线落点与弹窗交互
  */
 class SituationMap {
   constructor() {
     this.map = null;
-    this.tileLayer = null;
-    this.currentTileType = 'dark'; // 'dark' | 'satellite'
-    this.markersGroup = L.layerGroup();
-    this.flyingLinesGroup = L.layerGroup();
-
-    // 默认世界中心与国内中心
-    this.viewConfigs = {
-      world: { center: [20, 10], zoom: 2 },
-      china: { center: [35, 104], zoom: 4 }
+    this.currentLayer = null;
+    this.markersGroup = null;
+    this.flightLayerGroup = null;
+    this.layers = {
+      dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO'
+      }),
+      satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri'
+      })
     };
   }
 
   init(containerId) {
+    if (this.map) return;
     this.map = L.map(containerId, {
-      center: this.viewConfigs.world.center,
-      zoom: this.viewConfigs.world.zoom,
-      zoomControl: true,
+      center: [30, 10],
+      zoom: 2,
+      zoomControl: false,
       attributionControl: false
     });
 
-    // 初始底图：CartoDB Dark Matter
-    this.tileLayer = L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-      { maxZoom: 18 }
-    ).addTo(this.map);
+    this.currentLayer = this.layers.dark;
+    this.currentLayer.addTo(this.map);
 
-    this.markersGroup.addTo(this.map);
-    this.flyingLinesGroup.addTo(this.map);
+    this.markersGroup = L.layerGroup().addTo(this.map);
+    this.flightLayerGroup = L.layerGroup().addTo(this.map);
   }
 
   setTileLayer(type) {
-    if (this.currentTileType === type) return;
-    this.currentTileType = type;
-    this.map.removeLayer(this.tileLayer);
-
-    if (type === 'dark') {
-      this.tileLayer = L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        { maxZoom: 18 }
-      ).addTo(this.map);
-    } else if (type === 'satellite') {
-      this.tileLayer = L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        { maxZoom: 18 }
-      ).addTo(this.map);
+    if (!this.map) return;
+    if (this.currentLayer) {
+      this.map.removeLayer(this.currentLayer);
     }
+    this.currentLayer = this.layers[type] || this.layers.dark;
+    this.currentLayer.addTo(this.map);
   }
 
-  // 计算贝塞尔曲线上的一系列控制点
-  getBezierPoints(start, end, numPoints = 25) {
-    const lat1 = start[0], lng1 = start[1];
-    const lat2 = end[0], lng2 = end[1];
-
-    // 计算中点并向上拱起一个弧度高度
-    const midLat = (lat1 + lat2) / 2 + Math.abs(lng2 - lng1) * 0.15;
-    const midLng = (lng1 + lng2) / 2;
-
-    const points = [];
-    for (let i = 0; i <= numPoints; i++) {
-      const t = i / numPoints;
-      const lat = (1 - t) * (1 - t) * lat1 + 2 * (1 - t) * t * midLat + t * t * lat2;
-      const lng = (1 - t) * (1 - t) * lng1 + 2 * (1 - t) * t * midLng + t * t * lng2;
-      points.push([lat, lng]);
-    }
-    return points;
-  }
-
-  renderHotspots(items, scope = 'world') {
+  renderHotspots(list, scope) {
+    if (!this.map) return;
     this.markersGroup.clearLayers();
-    this.flyingLinesGroup.clearLayers();
+    this.flightLayerGroup.clearLayers();
 
-    // 确定辐射中心点（世界模式用伦敦/中心，国内模式用北京 [39.9, 116.4]）
-    const centerPoint = scope === 'china' ? [39.9042, 116.4074] : [40.0, 10.0];
+    // 设定飞线的起点枢纽（国内以北京为起点，全球以零度经纬度或核心枢纽为起点）
+    const hubCoord = scope === 'china' ? [39.9042, 116.4074] : [30.0, 10.0];
 
-    items.forEach((item, index) => {
-      // 1. 创建自定义 DivIcon 脉冲标记
-      const pulseClass =
+    list.forEach((item) => {
+      // 严格校验 Leaflet 要求的 [lat, lng] 顺序，防止经纬度颠倒产生漂移
+      const lat = parseFloat(item.lat);
+      const lng = parseFloat(item.lng);
+      if (isNaN(lat) || isNaN(lng)) return;
+
+      const targetCoord = [lat, lng];
+
+      // 根据事件等级分配颜色
+      const color =
         item.level === 'critical'
-          ? 'pulse-critical'
+          ? '#ef4444'
           : item.level === 'major'
-          ? 'pulse-major'
-          : 'pulse-normal';
+          ? '#f59e0b'
+          : '#8b5cf6';
 
-      const icon = L.divIcon({
-        className: 'custom-pulse-div-icon',
-        html: `
-          <div class="pulse-icon-wrapper ${pulseClass}">
-            <div class="pulse-ring"></div>
-            <div class="pulse-dot"></div>
-          </div>
-        `,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
+      // 1. 绘制飞线（从中心枢纽连向目标点）
+      const flightLine = L.polyline([hubCoord, targetCoord], {
+        color: color,
+        weight: 1.2,
+        opacity: 0.5,
+        dashArray: '4, 4'
+      });
+      this.flightLayerGroup.addLayer(flightLine);
+
+      // 2. 绘制飞线落点（外发光圆点）
+      const landingGlow = L.circleMarker(targetCoord, {
+        radius: 7,
+        fillColor: color,
+        color: color,
+        weight: 1,
+        fillOpacity: 0.3
+      });
+      this.flightLayerGroup.addLayer(landingGlow);
+
+      // 3. 绘制核心落点实体圆点（确保落点清晰可见）
+      const landingDot = L.circleMarker(targetCoord, {
+        radius: 3.5,
+        fillColor: '#ffffff',
+        color: color,
+        weight: 1.5,
+        fillOpacity: 1
       });
 
-      const marker = L.marker([item.lat, item.lng], { icon });
-
-      // 绑定简易 Popup
-      marker.bindPopup(`
-        <div style="color:#0a0e1a; font-weight:bold;">${item.title}</div>
-        <div style="font-size:12px; color:#475569;">${item.city} | 热度: ${item.heat}万</div>
-      `);
-
-      marker.on('click', () => {
-        if (window.openDetailModal) {
+      landingDot.on('click', () => {
+        if (typeof window.openDetailModal === 'function') {
           window.openDetailModal(item);
         }
       });
 
-      this.markersGroup.addLayer(marker);
-
-      // 2. 绘制前 8 个点到中心点的贝塞尔流动飞线
-      if (index < 8) {
-        const bezierCoords = this.getBezierPoints(centerPoint, [item.lat, item.lng]);
-        const polyline = L.polyline(bezierCoords, {
-          color: item.level === 'critical' ? '#ff4757' : '#00f5d4',
-          weight: 1.5,
-          opacity: 0.6,
-          dashArray: '6, 8',
-          className: 'flying-line-animated'
-        });
-        this.flyingLinesGroup.addLayer(polyline);
-      }
+      this.markersGroup.addLayer(landingDot);
     });
   }
 
-  flyToLocation(lat, lng, zoom = 6, item = null) {
-    this.map.flyTo([lat, lng], zoom, {
-      duration: 1.5
+  flyToLocation(lat, lng, zoom, item) {
+    if (!this.map) return;
+    this.map.flyTo([lat, lng], zoom || 6, {
+      duration: 1.2
     });
-
-    if (item) {
-      setTimeout(() => {
-        // 找到对应 marker 并打开 popup
-        this.markersGroup.eachLayer(layer => {
-          const latLng = layer.getLatLng();
-          if (
-            Math.abs(latLng.lat - item.lat) < 0.01 &&
-            Math.abs(latLng.lng - item.lng) < 0.01
-          ) {
-            layer.openPopup();
-          }
-        });
-      }, 1500);
-    }
   }
 
   switchScope(scope) {
-    const cfg = this.viewConfigs[scope];
-    this.map.flyTo(cfg.center, cfg.zoom, { duration: 1.2 });
+    if (!this.map) return;
+    if (scope === 'china') {
+      this.map.flyTo([35.8617, 104.1954], 4);
+    } else {
+      this.map.flyTo([30.0, 10.0], 2);
+    }
   }
 
   resize() {
     if (this.map) {
       this.map.invalidateSize();
     }
-  }
-}
-
-// 补充飞线动画 CSS 注入到页面
-const styleSheet = document.styleSheets[0];
-if (styleSheet) {
-  try {
-    styleSheet.insertRule(`
-      @keyframes dashFlow {
-        to {
-          stroke-dashoffset: -28;
-        }
-      }
-    `, styleSheet.cssRules.length);
-    styleSheet.insertRule(`
-      .flying-line-animated {
-        animation: dashFlow 2s linear infinite;
-      }
-    `, styleSheet.cssRules.length);
-  } catch (e) {
-    // 忽略样式插入异常
   }
 }
 
