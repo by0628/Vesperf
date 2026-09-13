@@ -1,5 +1,5 @@
 /**
- * js/main.js - 完整功能版（保留所有原版交互 + 亮暗主题 + Currents API 接入）
+ * js/main.js - 完整功能版（保留所有原版交互 + 亮暗主题 + Currents API 接入 + 正确分类映射）
  */
 class SituationApp {
   constructor() {
@@ -18,8 +18,12 @@ class SituationApp {
     this.initCanvasParticles();
     this.initEventListeners();
 
-    window.situationMap.init('leaflet-map');
-    window.situationCharts.init();
+    if (window.situationMap) {
+      window.situationMap.init('leaflet-map');
+    }
+    if (window.situationCharts) {
+      window.situationCharts.init();
+    }
     window.openDetailModal = (item) => this.showModal(item);
 
     await this.fetchRealTimeData();
@@ -35,8 +39,8 @@ class SituationApp {
     window.addEventListener('resize', () => {
       clearTimeout(this.resizeTimer);
       this.resizeTimer = setTimeout(() => {
-        window.situationMap.resize?.();
-        window.situationCharts.resize?.();
+        window.situationMap?.resize?.();
+        window.situationCharts?.resize?.();
       }, 150);
     });
   }
@@ -101,11 +105,35 @@ class SituationApp {
     } catch (err) {
       console.warn('Currents API 请求受限或离线，已自动切回内置静态数据集:', err);
     } finally {
-      this.currentList = [...window.HOTSPOT_DATA[this.currentScope]];
+      this.currentList = [...(window.HOTSPOT_DATA[this.currentScope] || [])];
       this.initRankingList();
-      window.situationMap.renderHotspots(this.currentList, this.currentScope);
-      window.situationCharts.updateByScope(this.currentScope);
+      window.situationMap?.renderHotspots?.(this.currentList, this.currentScope);
+      window.situationCharts?.updateByScope?.(this.currentScope);
     }
+  }
+
+  // 智能推断或解析新闻分类
+  inferCategory(item) {
+    if (item.category && typeof item.category === 'string') {
+      const raw = item.category.toLowerCase();
+      if (['policy', 'tech', 'economy', 'emergency', 'social'].includes(raw)) {
+        return raw;
+      }
+    }
+    const text = ((item.title || '') + ' ' + (item.description || '')).toLowerCase();
+    if (text.includes('bank') || text.includes('market') || text.includes('economy') || text.includes('stock') || text.includes('oil')) {
+      return 'economy';
+    }
+    if (text.includes('warn') || text.includes('earthquake') || text.includes('alert') || text.includes('fire') || text.includes('emergency')) {
+      return 'emergency';
+    }
+    if (text.includes('gov') || text.includes('policy') || text.includes('summit') || text.includes('president') || text.includes('law')) {
+      return 'policy';
+    }
+    if (text.includes('ai') || text.includes('tech') || text.includes('apple') || text.includes('quantum') || text.includes('chip')) {
+      return 'tech';
+    }
+    return 'social';
   }
 
   parseCurrentsNews(newsArray, scope) {
@@ -128,7 +156,7 @@ class SituationApp {
       return {
         id: item.id || `cur_${idx}`,
         title: item.title || '实时新闻简讯',
-        category: 'tech',
+        category: this.inferCategory(item), // 动态解析/推断真实 category
         city: coordObj.city,
         lat: coordObj.lat + (Math.random() - 0.5) * 1.5,
         lng: coordObj.lng + (Math.random() - 0.5) * 1.5,
@@ -386,7 +414,7 @@ class SituationApp {
 
         const scope = btn.dataset.scope;
         this.currentScope = scope;
-        this.currentList = [...window.HOTSPOT_DATA[scope]];
+        this.currentList = [...(window.HOTSPOT_DATA[scope] || [])];
 
         this.initRankingList();
         window.situationMap?.switchScope?.(scope);
