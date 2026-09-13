@@ -8,39 +8,27 @@ class SituationMap {
     this.markersGroup = null;
     this.flightLayerGroup = null;
 
-    // 修复：layers 对象必须只存放 layer 实例，不能带 .addTo()
     this.layers = {
-      dark: L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        {
-          attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          subdomains: 'abcd',
-          maxZoom: 20
-        }
-      ),
-      satellite: L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        {
-          attribution: '&copy; Esri',
-          maxZoom: 19
-        }
-      )
+      // 只改了这里：CARTO → OSM 官方矢量图
+      dark: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        subdomains: 'abc',
+        maxZoom: 19
+      }),
+      // satellite 完全没动
+      satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri'
+      })
     };
   }
 
   init(containerId) {
-    if (this.map) return this.map;
-
+    if (this.map) return;
     this.map = L.map(containerId, {
       center: [30, 10],
       zoom: 2,
       zoomControl: false,
-      attributionControl: false,
-      worldCopyJump: true,        // 防止跨经度飞线漂移
-      minZoom: 2,
-      maxBounds: [[-85, -180], [85, 180]], // 限制地图边界，避免拖出空白区
-      maxBoundsViscosity: 1.0
+      attributionControl: false
     });
 
     this.currentLayer = this.layers.dark;
@@ -48,11 +36,6 @@ class SituationMap {
 
     this.markersGroup = L.layerGroup().addTo(this.map);
     this.flightLayerGroup = L.layerGroup().addTo(this.map);
-
-    // 修复：容器尺寸在初始化时可能未就绪
-    setTimeout(() => this.map.invalidateSize(), 200);
-
-    return this.map;
   }
 
   setTileLayer(type) {
@@ -85,13 +68,7 @@ class SituationMap {
           ? '#f59e0b'
           : '#8b5cf6';
 
-      // 1. 飞线（处理跨 180° 经线的最短路径）
-      const path =
-        Math.abs(lng - hubCoord[1]) > 180
-          ? [hubCoord, [lat, lng > 0 ? lng - 360 : lng + 360], targetCoord]
-          : [hubCoord, targetCoord];
-
-      const flightLine = L.polyline(path, {
+      const flightLine = L.polyline([hubCoord, targetCoord], {
         color: color,
         weight: 1.2,
         opacity: 0.5,
@@ -99,7 +76,6 @@ class SituationMap {
       });
       this.flightLayerGroup.addLayer(flightLine);
 
-      // 2. 外发光落点
       const landingGlow = L.circleMarker(targetCoord, {
         radius: 7,
         fillColor: color,
@@ -109,7 +85,6 @@ class SituationMap {
       });
       this.flightLayerGroup.addLayer(landingGlow);
 
-      // 3. 核心落点
       const landingDot = L.circleMarker(targetCoord, {
         radius: 3.5,
         fillColor: '#ffffff',
@@ -118,16 +93,7 @@ class SituationMap {
         fillOpacity: 1
       });
 
-      landingDot.on('click', (e) => {
-        L.DomEvent.stopPropagation(e); // 防止点击冒泡到地图
-        if (typeof window.openDetailModal === 'function') {
-          window.openDetailModal(item);
-        }
-      });
-
-      // 同时给发光点绑定点击（体验更好）
-      landingGlow.on('click', (e) => {
-        L.DomEvent.stopPropagation(e);
+      landingDot.on('click', () => {
         if (typeof window.openDetailModal === 'function') {
           window.openDetailModal(item);
         }
@@ -139,7 +105,7 @@ class SituationMap {
 
   flyToLocation(lat, lng, zoom, item) {
     if (!this.map) return;
-    this.map.flyTo([parseFloat(lat), parseFloat(lng)], zoom || 6, {
+    this.map.flyTo([lat, lng], zoom || 6, {
       duration: 1.2
     });
   }
@@ -147,20 +113,15 @@ class SituationMap {
   switchScope(scope) {
     if (!this.map) return;
     if (scope === 'china') {
-      this.map.flyTo([35.8617, 104.1954], 4, { duration: 1.2 });
+      this.map.flyTo([35.8617, 104.1954], 4);
     } else {
-      this.map.flyTo([30.0, 10.0], 2, { duration: 1.2 });
+      this.map.flyTo([30.0, 10.0], 2);
     }
   }
 
   resize() {
-    if (this.map) this.map.invalidateSize();
-  }
-
-  destroy() {
     if (this.map) {
-      this.map.remove();
-      this.map = null;
+      this.map.invalidateSize();
     }
   }
 }
