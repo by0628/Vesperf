@@ -23,7 +23,7 @@ class SituationCharts {
   renderInitialCharts() {
     // 1. 情感分布环形图
     this.sentimentChart.setOption({
-      tooltip: { trigger: 'item' },
+      tooltip: { trigger: 'item', confine: true },
       series: [
         {
           name: '情感倾向',
@@ -48,7 +48,7 @@ class SituationCharts {
     // 2. 24h 声量趋势面积折线图
     const hours = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'];
     this.trendChart.setOption({
-      tooltip: { trigger: 'axis' },
+      tooltip: { trigger: 'axis', confine: true },
       grid: { left: '10%', right: '5%', top: '15%', bottom: '15%' },
       xAxis: {
         type: 'category',
