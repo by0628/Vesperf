@@ -8,7 +8,7 @@ class SituationMap {
     this.markersGroup = null;
     this.flightLayerGroup = null;
     this.layers = {
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=cb1_3j2v_1_c1ad28a03b30fd3741fcb48e', {
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_3j2v_1_c1ad28a03b30fd3741fcb48e', {
         attribution: '&copy; OpenStreetMap &copy; CARTO'
       }),
       satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
