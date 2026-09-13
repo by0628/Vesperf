@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>全球热点态势感知系统</title>
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- 自定义 CSS -->
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- 背景粒子 Canvas -->
+  <canvas id="bg-canvas"></canvas>
+
+  <div class="app-container">
+    <!-- 顶部 Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo-icon"></div>
+        <h1 class="system-title">全球热点态势感知系统</h1>
+        <span class="sub-title">GLOBAL HOTSPOT SITUATION AWARENESS</span>
+      </div>
+      <div class="header-right">
+        <div class="live-status">
+          <span class="live-dot"></span>
+          <span class="live-text">LIVE · 实时监控中</span>
+        </div>
+        <div class="clock-display" id="clock-display">2026-09-13 00:00:00</div>
+      </div>
+    </header>
+
+    <!-- 主体三栏布局 -->
+    <main class="main-content">
+      <!-- 左栏：KPI + 热点排行 -->
+      <section class="panel left-panel" id="view-ranking">
+        <div class="kpi-group">
+          <div class="kpi-card">
+            <span class="kpi-label">热点总数</span>
+            <span class="kpi-value" id="kpi-total">0</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">重大事件数</span>
+            <span class="kpi-value warning" id="kpi-critical">0</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">覆盖国家数</span>
+            <span class="kpi-value" id="kpi-countries">0</span>
+          </div>
+        </div>
+
+        <div class="panel-box ranking-box">
+          <div class="panel-header">
+            <div class="tab-switcher">
+              <button class="tab-btn active" data-scope="world">世界热点</button>
+              <button class="tab-btn" data-scope="china">国内热点</button>
+            </div>
+            <span class="refresh-tip">每5s动态波动</span>
+          </div>
+          <div class="ranking-list" id="ranking-list">
+            <!-- 动态生成列表项 -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 中栏：Leaflet地图区 -->
+      <section class="panel center-panel" id="view-map">
+        <div class="map-controls">
+          <div class="map-layer-switcher">
+            <button class="layer-btn active" data-layer="dark">CartoDB 矢量</button>
+            <button class="layer-btn" data-layer="satellite">Esri 卫星图</button>
+          </div>
+        </div>
+        <div id="leaflet-map"></div>
+      </section>
+
+      <!-- 右栏：ECharts 图表区 -->
+      <section class="panel right-panel" id="view-charts">
+        <div class="chart-card">
+          <div class="chart-title">情感分布 (Sentiment)</div>
+          <div class="chart-container" id="chart-sentiment"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">24h 声量趋势 (Trend)</div>
+          <div class="chart-container" id="chart-trend"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">分类占比 (Category)</div>
+          <div class="chart-container" id="chart-category"></div>
+        </div>
+        <div class="chart-gauges">
+          <div class="chart-card half">
+            <div class="chart-title">传播广度</div>
+            <div class="chart-container" id="chart-gauge-spread"></div>
+          </div>
+          <div class="chart-card half">
+            <div class="chart-title">情感烈度</div>
+            <div class="chart-container" id="chart-gauge-sentiment"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 底部事件流 -->
+    <footer class="event-stream-footer">
+      <div class="stream-label">实时事件流</div>
+      <div class="stream-scroll-wrapper">
+        <div class="stream-track" id="event-stream-track">
+          <!-- 动态插入事件流 -->
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- 移动端底部 Tab 导航 -->
+  <nav class="mobile-nav">
+    <button class="mobile-tab-btn active" data-target="view-ranking">🔥热点</button>
+    <button class="mobile-tab-btn" data-target="view-map">🗺️地图</button>
+    <button class="mobile-tab-btn" data-target="view-charts">📊分析</button>
+  </nav>
+
+  <!-- 弹窗遮罩 -->
+  <div class="modal-mask" id="detail-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-category-tag" id="modal-cat">政策</span>
+        <h3 id="modal-title">标题</h3>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-meta-grid">
+          <div><span>发生城市：</span><strong id="modal-city">-</strong></div>
+          <div><span>热度指数：</span><strong id="modal-heat">-</strong> 万</div>
+          <div><span>事件等级：</span><strong id="modal-level">-</strong></div>
+          <div><span>传播广度：</span><strong id="modal-spread">-</strong></div>
+          <div><span>情感倾向：</span><strong id="modal-sentiment">-</strong></div>
+          <div><span>观测时间：</span><strong id="modal-time">-</strong></div>
+        </div>
+        <div class="modal-summary" id="modal-summary">摘要内容...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CDN 依赖：Leaflet -> ECharts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+
+  <!-- 业务 JS 模块（按加载顺序） -->
+  <script src="js/data.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
